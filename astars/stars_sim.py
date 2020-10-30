@@ -3,8 +3,9 @@ print('__file__={0:<35} | __name__={1:<20} | __package__={2:<20}'.format(__file_
 
 
 from .utils.stars_param import get_L1,ECNoise
-from .utils.surrogates import train_rbf
+#from .utils.surrogates import train_rbf
 from .utils.misc import find_active, subspace_dist
+from scipy.special import gamma
 
 import numpy as np
 import active_subspaces as ac
@@ -27,6 +28,7 @@ class Stars_sim:
         self.set_dim = False
         self.subcycle = False
         self.cycle_win = 10
+        self.sphere = False
         
         #default internal settings, can be modified.
         self.update_L1 = False
@@ -38,11 +40,13 @@ class Stars_sim:
         self.debug = False
         self.adapt = 5  #adapt active subspace every 5 steps.
         self.use_weights = False
+        self.wts = None
         #process initial input vector
         if self.x.ndim > 1:
             self.x = self.x.flatten()
         self.dim = self.x.size
         self.threshold = .95 #set active subspace total svd threshold
+        
         
         #preallocate history arrays for efficiency
         self.x_noise = None
@@ -143,15 +147,27 @@ class Stars_sim:
         # Draw a random vector of same size as x_init
     
         if self.active is None:
-            u = np.random.normal(0,1,(self.dim))
+            if self.use_weights is False or self.wts is None:
+                u = np.random.normal(0,1,(self.dim))
+            else: 
+                u = self.wts * np.random.randn(self.dim)
+            if self.sphere is True:
+                print('original step length',np.linalg.norm(u))
+                u /= np.linalg.norm(u)
+                u *= np.sqrt(2)*gamma((self.dim+1)/2)
+                u /= gamma(self.dim/2)
+                
         else: 
             act_dim=self.active.shape[1]
-            if self.use_weights is False:
+            if self.use_weights is False or self.wts is None:
                 lam = np.random.normal(0,1,(act_dim))
             else:
-                lam = np.zeros((act_dim))
-                for i in range(act_dim):
-                    lam[i]=np.random.normal(0,self.wts[0][0]/self.wts[i][0])        
+                lam = np.zeros(act_dim)
+                lam = self.wts[0:act_dim] * np.random.randn(act_dim) 
+            if self.sphere is True:
+                lam /= np.linalg.norm(lam)
+                lam *= np.sqrt(2)*gamma((act_dim+1)/2)
+                lam /= gamma((act_dim/2))
             u = self.active@lam
             if self.debug is True:
                 print('Iteration',self.iter,'Oracle step=',u,)
@@ -330,8 +346,10 @@ class Stars_sim:
             self.L1 = sur_L1
 
         self.active=ss.eigenvecs[:,0:self.adim]
- 
-        self.wts=ss.eigenvals
+        #print(ss.eigenvals[0:self.adim+1].flatten())
+        self.wts = 1/np.sqrt(ss.eigenvals.flatten())
+        self.wts /= self.wts[0]
+        self.wts = np.minimum(10*np.ones(self.wts.shape),self.wts)
         self.directions = ss.eigenvecs
         ##update ASTARS parameters
         self.get_mu_star()
