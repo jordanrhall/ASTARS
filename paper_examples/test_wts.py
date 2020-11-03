@@ -30,7 +30,7 @@ class weight_sphere:
                 self.L1 = self.mag*self.dim*2.0
                 self.sig = sig
                 self.var = self.sig**2
-                self.name = 'Weeighted Sphere'
+                self.name = 'Example 2: Alternative Weighting'
                 self.nickname = 'wsph'
                 self.fstar = 0
                 self.adim = adim
@@ -46,7 +46,7 @@ class weight_sphere:
                 self.ntrials = 1000
                 self.adapt = 2*dim
                 self.regul = None
-                self.threshold = 0.99
+                self.threshold = 0.999
                 self.initscl = 1.0
     def __call__(self, x):
             return self.mag*np.sum(self.weights*x[0:self.adim]*x[0:self.adim]) + self.sig*np.random.randn(1)
@@ -76,11 +76,11 @@ ind = 0
 
 #for f in {toy2f, sph, nest}:
 f = ws
-#prinp.random.seed(9)
+np.random.seed(99)
 init_pt = np.ones(f.dim)
 init_pt /= np.linalg.norm(init_pt)
-ntrials = 10
-maxit = 300
+ntrials = 100
+maxit = 500
 
 
 f_avr = np.zeros(maxit+1)
@@ -88,7 +88,7 @@ f_av2 = np.copy(f_avr)
    
     
     
-    # STARS, no weights
+# FAASTARS, standard weights
 for trial in range(ntrials):
     #sim setup
    test = Stars_sim(f, init_pt, L1 = f.L1, var = f.var, verbose = False, maxit = maxit)
@@ -96,7 +96,8 @@ for trial in range(ntrials):
    test.get_mu_star()
    test.get_h()
    test.train_method = 'GQ'
-   test.threshold = .9999
+   test.threshold = f.threshold
+   test.regul = test.sigma
     # do 100 steps
    while test.iter < test.maxit:
        test.step()
@@ -117,7 +118,7 @@ f_avr /= ntrials
 
  
  
-
+# FAASTARS, alternate weights
 for trial in range(ntrials):
    #sim setup
    test = Stars_sim(f, init_pt, L1 = f.L1, var = f.var, verbose = False, maxit = maxit)
@@ -127,7 +128,8 @@ for trial in range(ntrials):
    test.get_mu_star()
    test.get_h()
    test.train_method = 'GQ'
-   test.threshold = .99999
+   test.regul = test.sigma
+   test.threshold = f.threshold + 0.00099
     # do 100 steps
    while test.iter < test.maxit:
        test.step()
@@ -144,8 +146,8 @@ for trial in range(ntrials):
         
 f_av2 /= ntrials
  
-plt.semilogy(np.abs(f_avr-f.fstar),lw = 5,label='STARS',color=stars_full, ls=sf_ls)
-plt.semilogy(np.abs(f_av2-f.fstar),lw = 5,label='weighted STARS',color=active_stars_ref, ls=sf_ls)
+plt.semilogy(np.abs(f_avr-f.fstar),lw = 5,label='FAASTARS, standard weights',color='red', ls=sf_ls)
+plt.semilogy(np.abs(f_av2-f.fstar),lw = 5,label='FAASTARS, alternative weights',color='black', ls=lr_ls)
  
 plt.title(f.name)
 plt.xlabel('$k$, iteration count')
