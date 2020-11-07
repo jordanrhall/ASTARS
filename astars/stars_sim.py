@@ -199,7 +199,7 @@ class Stars_sim:
                 #if poly[0] > - 1 / (4 * (self.adim + 4)):
                 
                 # If too slowly, user can optionally apply either Adaptive Thresholding or Active Subcycling.
-                if poly[0] > - 10  * self.dim * self.sigma / (2 ** 0.5):
+                if poly[0] > - .01  * self.dim * self.sigma / (2 ** 0.5):
                     print('Iteration ',self.iter)
                     print('Bad Average recent slope',poly[0])
                     
@@ -220,8 +220,8 @@ class Stars_sim:
                         print('active subcycling has kicked in, dim of I is:  ',self.adim)
                         
                         inactive_proj = self.active @ self.active.T
-                        for i in range(0,np.shape(self.xhist)[1]):
-                            self.xhist[:,i] = inactive_proj @ self.xhist[:,i]
+                        #for i in range(0,np.shape(self.xhist)[1]):
+                            #self.xhist[:,i] = inactive_proj @ self.xhist[:,i]
                         #self.x = inactive_proj @ self.x
                         
                         self.get_mu_star()
@@ -231,6 +231,7 @@ class Stars_sim:
                     elif self.subcycle_on is True:
                         self.adapt = self.dim
                         self.compute_active()
+                        self.Window = 2*self.dim**2
                         self.subcycle_on = False
                     
     

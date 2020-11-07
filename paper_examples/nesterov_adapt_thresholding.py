@@ -66,7 +66,7 @@ class test_weights:
         self.ntrials = 1 #50
         self.adapt = 2*dim
         self.regul = None # maybe - self.sig**2
-        self.threshold = .9    
+        self.threshold = .95    
         self.initscl = 1
     
     def __call__(self,x):
@@ -206,9 +206,9 @@ for f in {wt_fn}:
     plt.legend()
     plt.show()
     
-    plt.plot(test.xhist[1,-1000:], label='FAASTARS (No Extensions, $\\tau = 0.9$)')
-    plt.plot(test2.xhist[1,-1000:], label = 'FAASTARS (Adaptive Thresholding)')
-    plt.plot(test3.xhist[1,-1000:], label = 'FAASTARS (Active Subcycling)') 
+    plt.plot(test.xhist[1,:], label='FAASTARS (No Extensions, $\\tau = 0.9$)')
+    plt.plot(test2.xhist[1,:], label = 'FAASTARS (Adaptive Thresholding)')
+    plt.plot(test3.xhist[1,:], label = 'FAASTARS (Active Subcycling)') 
     plt.title(f.name)
     plt.xlabel('$k$, iteration count')
     plt.ylabel('$\lambda^{(k)}_2$') 
