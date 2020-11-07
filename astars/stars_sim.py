@@ -3,8 +3,9 @@ print('__file__={0:<35} | __name__={1:<20} | __package__={2:<20}'.format(__file_
 
 
 from .utils.stars_param import get_L1,ECNoise
-from .utils.surrogates import train_rbf
+#from .utils.surrogates import train_rbf
 from .utils.misc import find_active, subspace_dist
+from scipy.special import gamma
 
 import numpy as np
 import active_subspaces as ac
@@ -28,7 +29,11 @@ class Stars_sim:
         self.subcycle = False
         self.threshadapt = False
         self.cycle_win = 10
+
+        self.sphere = False
+
         self.active_step = 0
+
         
         #default internal settings, can be modified.
         self.update_L1 = False
@@ -40,12 +45,16 @@ class Stars_sim:
         self.debug = False
         self.adapt = 5  #adapt active subspace every 5 steps.
         self.use_weights = False
+        self.wts = None
         #process initial input vector
         if self.x.ndim > 1:
             self.x = self.x.flatten()
         self.dim = self.x.size
         self.threshold = .95 #set active subspace total svd threshold
         self.subcycle_on = False # for subcycling (for now) --J
+        
+        self.norm_surrogate = True #normalize surrogate to -1,1 and compute.
+        
         
         #preallocate history arrays for efficiency
         self.x_noise = None
@@ -100,7 +109,7 @@ class Stars_sim:
         self.xhist[:,0] = self.x
         self.fhist[0] = self.f(self.x)
         self.sigma = np.sqrt(self.var)
-        self.regul = self.sigma
+        self.regul = self.var
             
     def get_mu_star(self):
         if self.active is None:
@@ -148,18 +157,30 @@ class Stars_sim:
         # Draw a random vector of same size as x_init
     
         if self.active is None:
-            u = np.random.normal(0,1,(self.dim))
+            if self.use_weights is False or self.wts is None:
+                u = np.random.normal(0,1,(self.dim))
+            else: 
+                u = self.wts * np.random.randn(self.dim)
+            if self.sphere is True and self.debug is True:
+                print('original step length',np.linalg.norm(u))
+                u /= np.linalg.norm(u)
+                u *= np.sqrt(2)*gamma((self.dim+1)/2)
+                u /= gamma(self.dim/2)
+                
         else: 
             act_dim=self.active.shape[1]
-            if self.use_weights is False:
+            if self.use_weights is False or self.wts is None:
                 lam = np.random.normal(0,1,(act_dim))
             else:
-                lam = np.zeros((act_dim))
-                for i in range(act_dim):
-                    lam[i]=np.random.normal(0,self.wts[0][0]/self.wts[i][0])        
+                lam = np.zeros(act_dim)
+                lam = self.wts[0:act_dim] * np.random.randn(act_dim) 
+            if self.sphere is True:
+                lam /= np.linalg.norm(lam)
+                lam *= np.sqrt(2)*gamma((act_dim+1)/2)
+                lam /= gamma((act_dim/2))
             u = self.active@lam
             if self.debug is True:
-                print('Iteration',self.iter,'Oracle step=',u,)
+                print('Iteration',self.iter,'Oracle step=',u)
             #print(u.shape)
             if self.maxit > self.tr_stop and self.iter > self.tr_stop:
                 self.adim_hist[self.iter-self.tr_stop-1] = act_dim
@@ -199,7 +220,9 @@ class Stars_sim:
                 #if poly[0] > - 1 / (4 * (self.adim + 4)):
                 
                 # If too slowly, user can optionally apply either Adaptive Thresholding or Active Subcycling.
-                if poly[0] > - .01  * self.dim * self.sigma / (2 ** 0.5):
+
+                if poly[0] > - 10  * self.dim * self.sigma / (2 ** 0.5):
+
                     print('Iteration ',self.iter)
                     print('Bad Average recent slope',poly[0])
                     
@@ -223,13 +246,15 @@ class Stars_sim:
                         #for i in range(0,np.shape(self.xhist)[1]):
                             #self.xhist[:,i] = inactive_proj @ self.xhist[:,i]
                         #self.x = inactive_proj @ self.x
-                        
+
                         self.get_mu_star()
                         self.get_h()
                         self.adapt = 0 # turn off adapt
                         self.subcycle_on = True
                     elif self.subcycle_on is True:
                         self.adapt = self.dim
+                        self.Window = (self.dim)*(self.dim+1) //2
+                        print('Subcycle ended, recomputing active Subspace at iteration', self.iter)
                         self.compute_active()
                         self.Window = 2*self.dim**2
                         self.subcycle_on = False
@@ -264,21 +289,8 @@ class Stars_sim:
         ss=ac.subspaces.Subspaces()
         
 
-        # we now include training data x_noise,f_noise from ECNoise
-        if self.x_noise is None:
-            if self.Window is None:
-                train_x=np.hstack((self.xhist[:,0:self.iter+1],self.yhist[:,0:self.iter]))
-                train_f=np.hstack((self.fhist[0:self.iter+1],self.ghist[0:self.iter]))
-            else:
-                train_x=np.hstack((self.xhist[:,-self.Window:],self.yhist[:,-self.Window:]))
-                train_f=np.hstack((self.fhist[-self.Window:],self.ghist[-self.Window:]))
-        else:
-            if self.Window is None:
-                train_x=np.hstack((self.x_noise,self.xhist[:,1:self.iter+1],self.yhist[:,0:self.iter]))
-                train_f=np.hstack((self.f_noise,self.fhist[1:self.iter+1],self.ghist[0:self.iter]))
-            else:
-                train_x=np.hstack((self.x_noise,self.xhist[:,-self.Window:],self.yhist[:,-self.Window:]))
-                train_f=np.hstack((self.f_noise,self.fhist[-self.Window:],self.ghist[-self.Window:]))            
+        train_x,train_f = self.assemble_data()
+    
         
         if self.verbose:
             print('Computing Active Subspace after ',self.iter,' steps')
@@ -290,21 +302,14 @@ class Stars_sim:
                 print('Using ',self.train_method)
     
         #Normalize data for as
-        lb = np.amin(train_x,axis=1).reshape(-1,1)
-        ub = np.amax(train_x,axis=1).reshape(-1,1)
-        nrm_data=ac.utils.misc.BoundedNormalizer(lb,ub)
-
-        #print(lb,ub)
-        train_x=nrm_data.normalize(train_x.T)
-        if self.debug is True:
-            print(np.amax(train_x, axis = 0))
-            print(np.amin(train_x, axis = 0))
-        #print(train_x.shape)
+        if self.norm_surrogate is True:
+            train_x = self.normalize_data(train_x)
+        else:
+            train_x = train_x.T
         
         
         
-        if self.train_method is None:
-           
+        if self.train_method is None:          
             if train_f.size > (self.dim+1)*(self.dim+2)/2:
                 gquad = ac.utils.response_surfaces.PolynomialApproximation(N=2)
                 gquad.train(train_x, train_f, regul = self.regul) #regul = self.var)
@@ -315,8 +320,9 @@ class Stars_sim:
                 # normalization assumes [-1,1] inputs from above
             
                 C = np.outer(b, b.transpose()) + 1.0/3.0*np.dot(A, A.transpose())
-                D = np.diag(1.0/(.5*(ub-lb).flatten()))
-                C = D @ C @ D
+                if self.norm_surrogate is True:
+                    D = np.diag(1.0/(.5*(self.ub-self.lb).flatten()))
+                    C = D @ C @ D
                 ss.eigenvals,ss.eigenvecs = ac.subspaces.sorted_eigh(C)
                 
             elif train_f.size > (self.dim + 1):
@@ -330,14 +336,14 @@ class Stars_sim:
                 #ss.eigenvals,ss.eigenvecs = ac.subspaces.sorted_eigh(C)
                 df = ac.gradients.local_linear_gradients(train_x, train_f.reshape(-1,1)) 
                 #chain rule for LL
-                df = df / (.5*(ub-lb).flatten())
+                df = df / (.5*(self.ub-self.lb).flatten())
                 ss.compute(df=df, nboot=0)
         elif self.train_method == 'LL':
             #Estimated gradients using local linear models
             #print(train_x.size,train_f.size)
             df = ac.gradients.local_linear_gradients(train_x, train_f.reshape(-1,1)) 
             #chain rule for LL
-            df = df / (.5*(ub-lb).flatten())
+            df = df / (.5*(self.ub-self.lb).flatten())
             ss.compute(df=df, nboot=0)
         
         elif self.train_method == 'GQ':
@@ -353,12 +359,16 @@ class Stars_sim:
             # normalization assumes [-1,1] inputs from above
             
             C = np.outer(b, b.transpose()) + 1.0/3.0*np.dot(A, A.transpose())
-            D = np.diag(1.0/(.5*(ub-lb).flatten()))
-            C = D @ C @ D
+            if self.norm_surrogate is True:
+                D = np.diag(1.0/(.5*(self.ub-self.lb).flatten()))
+                C = D @ C @ D
             ss.eigenvals,ss.eigenvecs = ac.subspaces.sorted_eigh(C)
         
             #print('Condition number',gquad.cond)
             print('Rsqr',gquad.Rsqr)
+            self.surrogate = gquad
+            if self.norm_surrogate is True:
+                self.surr_domain = np.hstack((self.lb,self.ub))
 
         if self.set_dim is False:
 
@@ -377,11 +387,42 @@ class Stars_sim:
             self.L1 = sur_L1
 
         self.active=ss.eigenvecs[:,0:self.adim]
+        self.wts = 1/np.sqrt(ss.eigenvals.flatten())
+        self.wts /= self.wts[0]
+        self.wts = np.minimum(10*np.ones(self.wts.shape),self.wts)
+
         self.eigenvals = ss.eigenvals
-        self.wts=ss.eigenvals
+     
         self.directions = ss.eigenvecs
         ##update ASTARS parameters
         self.get_mu_star()
         self.get_h()
 
 
+    def assemble_data(self):
+        if self.Window is not None: 
+            start = np.maximum(0,self.iter - self.Window)
+            train_x=np.hstack((self.xhist[:,start:self.iter+1],self.yhist[:,start:self.iter]))
+            train_f=np.hstack((self.fhist[start:self.iter+1],self.ghist[start:self.iter]))
+        else:
+            if self.x_noise is None:
+                train_x=np.hstack((self.xhist[:,0:self.iter+1],self.yhist[:,0:self.iter]))
+                train_f=np.hstack((self.fhist[0:self.iter+1],self.ghist[0:self.iter]))
+ 
+            else:
+                train_x=np.hstack((self.x_noise,self.xhist[:,1:self.iter+1],self.yhist[:,0:self.iter]))
+                train_f=np.hstack((self.f_noise,self.fhist[1:self.iter+1],self.ghist[0:self.iter]))
+            
+        return train_x,train_f
+    
+    def normalize_data(self,train_x):
+    
+        lb = np.amin(train_x,axis=1).reshape(-1,1)
+        ub = np.amax(train_x,axis=1).reshape(-1,1)
+        self.lb = lb
+        self.ub = ub
+        nrm_data=ac.utils.misc.BoundedNormalizer(self.lb,self.ub)
+        train_x=nrm_data.normalize(train_x.T)
+        
+    
+        return train_x
