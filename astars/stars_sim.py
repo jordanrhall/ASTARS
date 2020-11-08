@@ -221,7 +221,7 @@ class Stars_sim:
                 
                 # If too slowly, user can optionally apply either Adaptive Thresholding or Active Subcycling.
 
-                if poly[0] > - 10  * self.dim * self.sigma / (2 ** 0.5):
+                if poly[0] > - 0.01  * self.dim * self.sigma / (2 ** 0.5):
 
                     print('Iteration ',self.iter)
                     print('Bad Average recent slope',poly[0])
@@ -238,11 +238,17 @@ class Stars_sim:
                     
                     # Active Subcycling
                     if self.subcycle is True and self.subcycle_on is False:
-                        self.active = self.directions[:,self.adim:self.dim]
-                        self.adim = self.dim - self.adim
+                        
+                        if self.iter < self.maxit/5:
+                            self.active = self.directions[:,self.adim:self.dim]
+                            self.adim = self.dim - self.adim
+                        # Version 0 - just switch STARS on...
+                        else:
+                            self.active = self.directions
+                            self.adim = self.dim
                         print('active subcycling has kicked in, dim of I is:  ',self.adim)
                         
-                        inactive_proj = self.active @ self.active.T
+                        #inactive_proj = self.active @ self.active.T
                         #for i in range(0,np.shape(self.xhist)[1]):
                             #self.xhist[:,i] = inactive_proj @ self.xhist[:,i]
                         #self.x = inactive_proj @ self.x
@@ -252,11 +258,11 @@ class Stars_sim:
                         self.adapt = 0 # turn off adapt
                         self.subcycle_on = True
                     elif self.subcycle_on is True:
-                        self.adapt = self.dim
-                        self.Window = (self.dim)*(self.dim+1) //2
+                        #self.adapt = self.dim
+                        #self.Window = (self.dim)*(self.dim+1) //2
                         print('Subcycle ended, recomputing active Subspace at iteration', self.iter)
-                        self.compute_active()
-                        self.Window = 2*self.dim**2
+                        if self.iter < self.maxit/5:
+                            self.compute_active()
                         self.subcycle_on = False
                     
     
