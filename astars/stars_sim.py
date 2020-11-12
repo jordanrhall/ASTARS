@@ -156,7 +156,7 @@ class Stars_sim:
             mu_star = self.mu_star*abs(f0)**0.5    
         # Draw a random vector of same size as x_init
     
-        if self.active is None:
+        if self.active is None or self.STARS_only is True:
             if self.use_weights is False or self.wts is None:
                 u = np.random.normal(0,1,(self.dim))
             else: 
@@ -206,7 +206,7 @@ class Stars_sim:
         
         # Check for stagnation of convergence regardless of method
         if (self.subcycle is True or self.threshadapt is True) and self.active is not None:
-            if self.iter - self.active_step > np.minimum(10, self.adapt/2) and self.threshold<1-self.var:
+            if self.iter - self.active_step > np.minimum(10, self.adapt/2) and self.threshold < 1 - self.var:
             
                 fsamp = self.fhist[-self.cycle_win+self.iter+1:self.iter+1]
                 poly = np.polyfit(np.arange(self.cycle_win),fsamp,1)
@@ -221,7 +221,7 @@ class Stars_sim:
                 
                 # If too slowly, user can optionally apply either Adaptive Thresholding or Active Subcycling.
 
-                if poly[0] > - 0.01  * self.dim * self.sigma / (2 ** 0.5):
+                if poly[0] > - 1  * self.dim * self.sigma / (2 ** 0.5):
 
                     print('Iteration ',self.iter)
                     print('Bad Average recent slope',poly[0])
@@ -234,36 +234,49 @@ class Stars_sim:
                         self.active = self.directions[:,0:self.adim]
                         self.get_mu_star()
                         self.get_h()
+                        self.active_step = self.iter
                         print('Threshold was increased to', self.threshold, 'for the user due to slow convergence.')
+                        print('the active set is now', self.active)
                     
                     # Active Subcycling
                     if self.subcycle is True and self.subcycle_on is False:
-                        
-                        if self.iter < self.maxit/5:
-                            self.active = self.directions[:,self.adim:self.dim]
-                            self.adim = self.dim - self.adim
+                                            
                         # Version 0 - just switch STARS on...
-                        else:
-                            self.active = self.directions
-                            self.adim = self.dim
-                        print('active subcycling has kicked in, dim of I is:  ',self.adim)
+                        self.STARS_only = True
+                        print('Version 0: Switch to STARS.')
                         
+                        # Version 1 - switch to inactive set
+                        #self.active = self.directions[:,self.adim:self.dim]
+                        #self.adim = self.dim - self.adim
+                        #print('active subcycling has kicked in, dim of I is:  ',self.adim)
+                        
+                        # Projects unnecessary in versions 0/1
                         #inactive_proj = self.active @ self.active.T
                         #for i in range(0,np.shape(self.xhist)[1]):
                             #self.xhist[:,i] = inactive_proj @ self.xhist[:,i]
                         #self.x = inactive_proj @ self.x
-
+                        
+                        # Both versions need:
                         self.get_mu_star()
                         self.get_h()
-                        self.adapt = 0 # turn off adapt
-                        self.subcycle_on = True
+                        self.adapt = 0 # turns off adapt
+                        
+                        self.subcycle = False # do this for version 0
+                        
+                        #self.subcycle_on = True # do this for version 1
+                        #self.active_step = self.iter # do this for version 1
                     elif self.subcycle_on is True:
-                        #self.adapt = self.dim
-                        #self.Window = (self.dim)*(self.dim+1) //2
+                        self.adapt = self.dim
+                        self.Window = (self.dim)*(self.dim+1) //2
                         print('Subcycle ended, recomputing active Subspace at iteration', self.iter)
-                        if self.iter < self.maxit/5:
-                            self.compute_active()
-                        self.subcycle_on = False
+                        self.compute_active()
+                        #norm_e_vals = self.eigenvals / np.sum(self.eigenvals)
+                        #self.adim += 1
+                        #self.threshold = np.sum(norm_e_vals[0:self.adim])
+                        #self.active = self.directions[:,0:self.adim]
+                        #self.get_mu_star()
+                        #self.get_h()                        
+                        #self.subcycle_on = False
                     
     
         if self.update_L1 is True and (self.active is None or self.train_method != 'GQ') and self.mult is False:

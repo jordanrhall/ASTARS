@@ -27,7 +27,7 @@ user_file_path = '/home/ccm/Desktop/'
         
 class nesterov_2:
     
-    def __init__(self, dim = 10, sig = 1E-2):
+    def __init__(self, dim = 10, sig = 1E-3):
         self.dim = dim
         self.sig = sig
         self.L1 = 2**9
@@ -35,7 +35,7 @@ class nesterov_2:
         self.nickname = 'nest_2'
         self.name = 'Example 3: STARS vs FAASTARS With Adaptive Thresholding'
         self.fstar = 0
-        self.maxit = 25000
+        self.maxit = 5000
         self.ntrials = 10 #50
         self.adapt = 2*dim
         self.regul = None # maybe - self.sig**2
@@ -54,7 +54,7 @@ class nesterov_2:
         
 class test_weights:
     
-    def __init__(self, dim = 10, sig = 1E-4):
+    def __init__(self, dim = 10, sig = 1E-2):
         self.dim = dim
         self.sig = sig
         self.L1 = 200
@@ -62,10 +62,10 @@ class test_weights:
         self.nickname = 'test_weights'
         self.name = 'Example 4: STARS vs FAASTARS With Adaptive Thresholding'
         self.fstar = 0
-        self.maxit = 20000
-        self.ntrials = 5 #50
+        self.maxit = 3000
+        self.ntrials = 30 #50
         self.adapt = 2*dim
-        self.regul = None # maybe - self.sig**2
+        self.regul = self.sig**2
         self.threshold = .9
         self.initscl = 1
         
@@ -75,6 +75,7 @@ class test_weights:
         
         temp = np.arange(self.dim,dtype=float)
         weights = np.zeros(dim)
+        #weights[0], weights[1], weights[2] = 100, 10, 1
         weights[0], weights[1] = 100, 1
         y = np.copy(x)
         y *= y
@@ -102,8 +103,8 @@ active_stars_ref, rf_ls = 'blue', ':'
 # Start the clock!
 start = timeit.default_timer()
 
-for f in {wt_fn}:
-#for f in {nest}:
+#for f in {wt_fn}:
+for f in {nest}:
     dim = f.dim
     #np.random.seed(9)
     #init_pt = f.initscl*np.random.randn(dim)
