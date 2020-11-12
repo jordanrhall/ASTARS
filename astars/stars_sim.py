@@ -29,10 +29,16 @@ class Stars_sim:
         self.subcycle = False
         self.threshadapt = False
         self.cycle_win = 10
-
+        self.lasso = False
+        
+        self.as_comp_step = None
+        
+      
         self.sphere = False
 
         self.active_step = 0
+        self.pad_train = 1.0
+        self.explore_weight = 1.0
 
         
         #default internal settings, can be modified.
@@ -51,7 +57,13 @@ class Stars_sim:
             self.x = self.x.flatten()
         self.dim = self.x.size
         self.threshold = .95 #set active subspace total svd threshold
+        
+        #subcycling
         self.subcycle_on = False # for subcycling (for now) --J
+        self.project = False
+        self.directions = None
+        self.slope_weight = 1.0
+        #self.full_dirs = None
         
         self.norm_surrogate = True #normalize surrogate to -1,1 and compute.
         
@@ -141,11 +153,11 @@ class Stars_sim:
         if not self.STARS_only:
             if self.active is None or (self.adapt > 0  and self.iter%self.adapt == 0):
                 if self.train_method is None or self.train_method == 'LL':
-                    if 2*self.iter > self.dim:
+                    if 2*self.iter > self.pad_train*self.dim:
                         self.compute_active() 
                         self.active_step = self.iter  
                 elif self.train_method == 'GQ':
-                    if 2*self.iter + 1 > .5*(2 + self.dim) * (1+self.dim):
+                    if 2*self.iter + 1 > self.pad_train *( .5*(2 + self.dim) * (1+self.dim)):
                         self.compute_active()
                         self.active_step = self.iter
                         
@@ -156,16 +168,20 @@ class Stars_sim:
             mu_star = self.mu_star*abs(f0)**0.5    
         # Draw a random vector of same size as x_init
     
-        if self.active is None or self.STARS_only is True:
-            if self.use_weights is False or self.wts is None:
-                u = np.random.normal(0,1,(self.dim))
-            else: 
+
+        if self.active is None and self.STARS_only is True:
+            u = np.random.normal(0,1,(self.dim))
+        elif self.active is None:
+           if self.use_weights is False or self.wts is None:
+               u = np.random.normal(0,self.explore_weight,(self.dim))
+           else: 
+
                 u = self.wts * np.random.randn(self.dim)
-            if self.sphere is True and self.debug is True:
-                print('original step length',np.linalg.norm(u))
-                u /= np.linalg.norm(u)
-                u *= np.sqrt(2)*gamma((self.dim+1)/2)
-                u /= gamma(self.dim/2)
+            #if self.sphere is True and self.debug is True:
+            #    print('original step length',np.linalg.norm(u))
+            #    u /= np.linalg.norm(u)
+            #    u *= np.sqrt(2)*gamma((self.dim+1)/2)
+            #    u /= gamma(self.dim/2)
                 
         else: 
             act_dim=self.active.shape[1]
@@ -206,8 +222,10 @@ class Stars_sim:
         
         # Check for stagnation of convergence regardless of method
         if (self.subcycle is True or self.threshadapt is True) and self.active is not None:
+
             if self.iter - self.active_step > np.minimum(10, self.adapt/2) and self.threshold < 1 - self.var:
             
+
                 fsamp = self.fhist[-self.cycle_win+self.iter+1:self.iter+1]
                 poly = np.polyfit(np.arange(self.cycle_win),fsamp,1)
                 
@@ -221,6 +239,7 @@ class Stars_sim:
                 
                 # If too slowly, user can optionally apply either Adaptive Thresholding or Active Subcycling.
 
+
                 if poly[0] > - 1  * self.dim * self.sigma / (2 ** 0.5):
 
                     print('Iteration ',self.iter)
@@ -229,9 +248,10 @@ class Stars_sim:
                     # Adaptive Thresholding
                     if self.threshadapt is True:
                         norm_e_vals = self.eigenvals / np.sum(self.eigenvals)
+
                         self.adim += 1
                         self.threshold = np.sum(norm_e_vals[0:self.adim])
-                        self.active = self.directions[:,0:self.adim]
+                        #self.active = ss.eigenvecs[:,0:self.adim]
                         self.get_mu_star()
                         self.get_h()
                         self.active_step = self.iter
@@ -277,6 +297,7 @@ class Stars_sim:
                         #self.get_mu_star()
                         #self.get_h()                        
                         #self.subcycle_on = False
+
                     
     
         if self.update_L1 is True and (self.active is None or self.train_method != 'GQ') and self.mult is False:
@@ -304,13 +325,20 @@ class Stars_sim:
 
     def compute_active(self):
     
+        if self.as_comp_step is None:
+            self.as_comp_step = np.array(self.iter)
+        else:
+            self.as_comp_step = np.append(self.as_comp_step,self.iter)
 
         ss=ac.subspaces.Subspaces()
         
 
         train_x,train_f = self.assemble_data()
     
-        
+        if self.project is True:
+            train_x = train_x @ self.directions
+            #should be samples by subspace dim but may need to transpose
+            
         if self.verbose:
             print('Computing Active Subspace after ',self.iter,' steps')
             print('Training Data Size',train_x.shape)
@@ -323,15 +351,17 @@ class Stars_sim:
         #Normalize data for as
         if self.norm_surrogate is True:
             train_x = self.normalize_data(train_x)
-        else:
-            train_x = train_x.T
+            if self.verbose:
+                print('Bounds for surrogate')
+                print(np.vstack((self.lb,self.ub)))
+       
         
         
         
         if self.train_method is None:          
             if train_f.size > (self.dim+1)*(self.dim+2)/2:
                 gquad = ac.utils.response_surfaces.PolynomialApproximation(N=2)
-                gquad.train(train_x, train_f, regul = self.regul) #regul = self.var)
+                gquad.train(train_x, train_f, regul = self.regul, lasso=self.lasso) #regul = self.var)
                 # get regression coefficients
                 b, A = gquad.g, gquad.H
 
@@ -343,7 +373,7 @@ class Stars_sim:
                     D = np.diag(1.0/(.5*(self.ub-self.lb).flatten()))
                     C = D @ C @ D
                 ss.eigenvals,ss.eigenvecs = ac.subspaces.sorted_eigh(C)
-                
+                self.surrogate = gquad
             elif train_f.size > (self.dim + 1):
                 #use local linear models instead!
                 #gquad = ac.utils.response_surfaces.PolynomialApproximation(N=1)
@@ -357,6 +387,7 @@ class Stars_sim:
                 #chain rule for LL
                 df = df / (.5*(self.ub-self.lb).flatten())
                 ss.compute(df=df, nboot=0)
+                self.surrogate = None
         elif self.train_method == 'LL':
             #Estimated gradients using local linear models
             #print(train_x.size,train_f.size)
@@ -364,12 +395,13 @@ class Stars_sim:
             #chain rule for LL
             df = df / (.5*(self.ub-self.lb).flatten())
             ss.compute(df=df, nboot=0)
+            self.surrogate = None
         
         elif self.train_method == 'GQ':
             #use global quadratic surrogate
             
             gquad = ac.utils.response_surfaces.PolynomialApproximation(N=2)
-            gquad.train(train_x, train_f, regul = self.regul) #regul = self.var)
+            gquad.train(train_x, train_f, regul = self.regul) #, lasso = self.lasso) #regul = self.var)
 
             # get regression coefficients
             b, A = gquad.g, gquad.H
@@ -384,7 +416,8 @@ class Stars_sim:
             ss.eigenvals,ss.eigenvecs = ac.subspaces.sorted_eigh(C)
         
             #print('Condition number',gquad.cond)
-            print('Rsqr',gquad.Rsqr)
+            if self.verbose is True:
+                print('Surrogate Rsqr',gquad.Rsqr)
             self.surrogate = gquad
             if self.norm_surrogate is True:
                 self.surr_domain = np.hstack((self.lb,self.ub))
@@ -398,21 +431,39 @@ class Stars_sim:
             print('Subspace Dimension',self.adim)
             print(ss.eigenvals[0:self.adim])
             print('Subspace',ss.eigenvecs[:,0:self.adim])
-        if self.update_L1 is True and self.train_method == 'GQ':
+            
+        if self.update_L1 is True and self.surrogate is not None:
             mapH = D @ gquad.H @ D
-            #print('H shape',gquad.H.shape)
-            sur_L1 = (np.linalg.eigh(mapH)[0])[-1]
-            print('L1 from surrogate',sur_L1)
-            self.L1 = sur_L1
+            
+            sur_L1 = np.linalg.norm(mapH)
+            if self.verbose is True:
+                print('L1 from surrogate',sur_L1)
+            if self.project is True:
+                self.L1 = np.minimum(sur_L1,self.L1)
+            else:
+                self.L1 = sur_L1
 
+        if self.directions is not None:
+            ss.eigenvecs = self.directions @ ss.eigenvecs 
+            
+        if self.verbose is True or self.debug is True:
+            print('Subspace Dimension',self.adim)
+            print('Eigenvalues',ss.eigenvals[0:self.adim].flatten())
+            print('Subspace',ss.eigenvecs[:,0:self.adim])
+            
         self.active=ss.eigenvecs[:,0:self.adim]
+        if self.adim < ss.eigenvecs.shape[1]:
+            self.inactive=ss.eigenvecs[:,self.adim:]
+        else:
+            self.inactive = None
+        
         self.wts = 1/np.sqrt(ss.eigenvals.flatten())
         self.wts /= self.wts[0]
         self.wts = np.minimum(10*np.ones(self.wts.shape),self.wts)
 
         self.eigenvals = ss.eigenvals
+        #self.full_dirs == ss.eigenvecs
      
-        self.directions = ss.eigenvecs
         ##update ASTARS parameters
         self.get_mu_star()
         self.get_h()
@@ -432,16 +483,16 @@ class Stars_sim:
                 train_x=np.hstack((self.x_noise,self.xhist[:,1:self.iter+1],self.yhist[:,0:self.iter]))
                 train_f=np.hstack((self.f_noise,self.fhist[1:self.iter+1],self.ghist[0:self.iter]))
             
-        return train_x,train_f
+        return train_x.T,train_f.reshape(-1,1)
     
     def normalize_data(self,train_x):
     
-        lb = np.amin(train_x,axis=1).reshape(-1,1)
-        ub = np.amax(train_x,axis=1).reshape(-1,1)
+        lb = np.amin(train_x,axis=0)
+        ub = np.amax(train_x,axis=0)
         self.lb = lb
         self.ub = ub
         nrm_data=ac.utils.misc.BoundedNormalizer(self.lb,self.ub)
-        train_x=nrm_data.normalize(train_x.T)
+        train_x=nrm_data.normalize(train_x)
         
     
         return train_x
