@@ -30,7 +30,7 @@ class weight_sphere:
                 self.L1 = self.mag*self.dim*2.0
                 self.sig = sig
                 self.var = self.sig**2
-                self.name = 'Weeighted Sphere'
+                self.name = 'Example 2: Alternative Weighting'
                 self.nickname = 'wsph'
                 self.fstar = 0
                 self.adim = adim
@@ -79,8 +79,8 @@ f = ws
 #prinp.random.seed(9)
 init_pt = np.ones(f.dim)
 init_pt /= np.linalg.norm(init_pt)
-ntrials = 30
-maxit = 900
+ntrials = 100
+maxit = 500
 
 
 f_avr = np.zeros(maxit+1)
@@ -96,7 +96,7 @@ for trial in range(ntrials):
    test.get_mu_star()
    test.get_h()
    test.train_method = 'GQ'
-   test.threshold = .999
+   test.threshold = .99999
     # do 100 steps
    while test.iter < test.maxit:
        test.step()
@@ -127,7 +127,7 @@ for trial in range(ntrials):
    test.get_mu_star()
    test.get_h()
    test.train_method = 'GQ'
-   test.threshold = .999
+   test.threshold = .99999
    while test.iter < test.maxit:
        test.step()
     
@@ -143,8 +143,8 @@ for trial in range(ntrials):
         
 f_av2 /= ntrials
  
-plt.semilogy(np.abs(f_avr-f.fstar),lw = 5,label='STARS',color=stars_full, ls=sf_ls)
-plt.semilogy(np.abs(f_av2-f.fstar),lw = 5,label='weighted STARS',color=active_stars_ref, ls=sf_ls)
+plt.semilogy(np.abs(f_avr-f.fstar),lw = 5,label='FASTARS, Standard Weights',color=stars_full, ls=sf_ls)
+plt.semilogy(np.abs(f_av2-f.fstar),lw = 5,label='FAASTARS, Alternative Weights',color=active_stars_ref, ls=sf_ls)
  
 plt.title(f.name)
 plt.xlabel('$k$, iteration count')

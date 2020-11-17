@@ -31,7 +31,7 @@ class data_misfit:
         self.L1 = np.maximum(4,12*data) #self.dim**2 #approx
         self.sig = sig
         self.var = self.sig**2
-        self.name = 'DCI Example 1: '
+        self.name = 'DCI Example 2: Minimizing Data Misfit for DCI, STARS vs FAASTARS '
         self.nickname = 'DCI'
         self.fstar = 0
         self.var = self.sig**2
@@ -116,8 +116,8 @@ for f in {dci}:
     #np.random.seed(9)
     init_pt = np.ones(f.dim) #prior mean
     #init_pt /= np.linalg.norm(init_pt)
-    ntrials = 10
-    maxit = 500
+    ntrials = 100
+    maxit = 300
 
 
     f_avr = np.zeros(maxit+1)
@@ -182,8 +182,8 @@ for f in {dci}:
     
 
  
-    plt.semilogy(np.abs(f_avr-f.fstar),lw = 5,label='DCI',color=stars_full, ls=sf_ls)
-    plt.semilogy(np.abs(f2_avr-f.fstar),lw = 5,label='DCI ASTARS',color='blue', ls=sf_ls)
+    plt.semilogy(np.abs(f_avr-f.fstar),lw = 5,label='DCI, STARS',color=stars_full, ls=sf_ls)
+    plt.semilogy(np.abs(f2_avr-f.fstar),lw = 5,label='DCI, FAASTARS',color='black', ls=sf_ls)
     #plt.semilogy(np.abs(f3_avr-f.fstar),lw = 5,label='DCI known ASTARS',color='blue', ls=sf_ls)
     plt.title(f.name)
     plt.xlabel('$k$, iteration count')
@@ -196,3 +196,4 @@ sub = ss.subspaces.Subspaces()
 g_surr = ss.utils.response_surfaces.PolynomialApproximation(N=3)
 g_surr.train(dci.inputs, dci.outputs, regul = test2.regul) #regul = self.var)
 mud_grad = g_surr.predict(test2.x.reshape(1,trial_final.size),compgrad = True)
+print(mud_grad)

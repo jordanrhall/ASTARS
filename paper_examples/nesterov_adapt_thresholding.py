@@ -33,7 +33,7 @@ class nesterov_2:
         self.L1 = 2**9
         self.var = self.sig**2
         self.nickname = 'nest_2'
-        self.name = 'Example 3: STARS vs FAASTARS With Adaptive Thresholding'
+        self.name = 'Example 3: STARS vs FAASTARS With Adaptive Thresholding and Active Subcycling'
         self.fstar = 0
         self.maxit = 1000
         self.ntrials = 1 #50
