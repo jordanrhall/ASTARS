@@ -374,7 +374,7 @@ class Stars_sim:
         if self.train_method is None:          
             if train_f.size > (self.dim+1)*(self.dim+2)/2:
                 gquad = ac.utils.response_surfaces.PolynomialApproximation(N=2)
-                gquad.train(train_x, train_f, regul = self.regul, lasso=self.lasso) #regul = self.var)
+                gquad.train(train_x, train_f, regul = self.regul) #, lasso=self.lasso) #regul = self.var)
                 # get regression coefficients
                 b, A = gquad.g, gquad.H
 
@@ -414,7 +414,7 @@ class Stars_sim:
             #use global quadratic surrogate
             
             gquad = ac.utils.response_surfaces.PolynomialApproximation(N=2)
-            gquad.train(train_x, train_f, regul = self.regul, lasso = self.lasso) #regul = self.var)
+            gquad.train(train_x, train_f, regul = self.regul) #, lasso = self.lasso) #regul = self.var)
 
             # get regression coefficients
             b, A = gquad.g, gquad.H
@@ -437,7 +437,7 @@ class Stars_sim:
         elif self.train_method == 'GL':
             #use global linear surrogate
             glin = ac.utils.response_surfaces.PolynomialApproximation(N=1)
-            glin.train(train_x, train_f, regul = self.regul, lasso = self.lasso) #regul = self.var)
+            glin.train(train_x, train_f, regul = self.regul) #, lasso = self.lasso) #regul = self.var)
 
             # get regression coefficients
             b = glin.g

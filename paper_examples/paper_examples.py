@@ -38,7 +38,7 @@ class toy2:
                 self.active = self.active.reshape(-1,1)
                 
                 self.maxit = 2*dim**2
-                self.ntrials = 1000
+                self.ntrials = 100
                 self.adapt = 2*dim
                 self.regul = None
                 self.threshold = 0.99
@@ -64,7 +64,7 @@ class toy_sqr:
                 self.active = self.active.reshape(-1,1)
                 
                 self.maxit = 2*dim**2
-                self.ntrials = 10
+                self.ntrials = 5
                 self.adapt = 2*dim
                 self.regul = None
                 self.threshold = 0.99
@@ -90,7 +90,7 @@ class sphere:
               self.fstar = 0
               
               self.maxit = 2*dim**2
-              self.ntrials = 100
+              self.ntrials = 10
               self.adapt = dim
               self.regul = self.sig**2
               self.threshold = 0.999
@@ -112,7 +112,7 @@ class nesterov_2_f:
         self.nickname = 'nesterov_2'
         self.fstar = .5*(-1 + 1 / (self.adim + 1))
         self.maxit = 6000
-        self.ntrials = 1 #50
+        self.ntrials = 10 #50
         self.adapt = 2*dim
         self.regul = self.sig**2
         self.threshold = .9 # ideal for this setup: 0.999
@@ -153,8 +153,8 @@ active_stars_ref, rf_ls = 'blue', ':'
 # Start the clock!
 start = timeit.default_timer()
 
-for f in {nest}:
-#for f in {toy2f, sph, nest}:
+
+for f in {toy2f, sph, nest}:
     dim = f.dim
     np.random.seed(9)
     init_pt = f.initscl*np.random.randn(dim)
@@ -165,13 +165,7 @@ for f in {nest}:
     f2_avr = np.zeros(maxit+1)
     f_avr = np.zeros(maxit+1)
     
-    #initialize storage for data dump
-    STARS_f_sto = np.zeros((maxit+1,1))
-    STARS_x_sto = np.zeros((1,dim))
-    ASTARS_f_sto = np.zeros((maxit+1,1))
-    ASTARS_x_sto = np.zeros((1,dim))
-    FAASTARS_f_sto = np.zeros((maxit+1,1))
-    FAASTARS_x_sto = np.zeros((1,dim))    
+  
     
 
     
@@ -189,10 +183,7 @@ for f in {nest}:
     #update average of f
         f_avr += test.fhist
         
-        # data dump
-        #STARS_f_sto = np.hstack((STARS_f_sto, np.transpose([test.fhist])))
-        #STARS_x_sto = np.vstack((STARS_x_sto,np.transpose(test.xhist)))
-        
+
         print('STARS trial',trial,' minval',test.fhist[-1])
 
     # FAASTARS
@@ -221,17 +212,7 @@ for f in {nest}:
         f2_avr += test.fhist
         
 
-        if maxit > test.tr_stop:
-            FAASTARS_adim_sto = np.zeros((maxit-test.tr_stop-1,1))
-            FAASTARS_sub_dist_sto = np.zeros((maxit-test.tr_stop-1,1))
-        
-        # data dump
 
-        FAASTARS_f_sto = np.hstack((FAASTARS_f_sto, np.transpose([test.fhist])))
-        FAASTARS_x_sto = np.vstack((FAASTARS_x_sto,np.transpose(test.xhist)))
-        if maxit > test.tr_stop:
-            FAASTARS_adim_sto = np.hstack((FAASTARS_adim_sto, np.transpose([test.adim_hist])))
-            FAASTARS_sub_dist_sto = np.hstack((FAASTARS_sub_dist_sto, np.transpose([test.sub_dist_hist])))
         print('FAASTARS trial',trial,' minval',test.fhist[-1])
     
     # ASTARS
@@ -248,12 +229,7 @@ for f in {nest}:
     
     #update average of f
         f3_avr += test.fhist  
-        
-        # data dump
-        #ASTARS_f_sto = np.hstack((ASTARS_f_sto, np.transpose([test.fhist])))
-        #ASTARS_x_sto = np.vstack((ASTARS_x_sto,np.transpose(test.xhist)))
-             
-        
+
         print('True ASTARS trial',trial,' minval',test.fhist[-1])
         
     f_avr /= ntrials
@@ -261,17 +237,7 @@ for f in {nest}:
     f3_avr /= ntrials
     
 
-    # Reads out key data into individual csv files via Pandas. (Need documentation for formatting...)
-
-    pd.DataFrame(STARS_f_sto[:,1:np.shape(STARS_f_sto)[1]]).to_csv(user_file_path + 'STARS_f_sto_' + f.nickname + '.csv', header=None, index=None, sep='\t')
-    pd.DataFrame(STARS_x_sto[1:np.shape(STARS_x_sto)[0],:]).to_csv(user_file_path + 'STARS_x_sto_' + f.nickname +  '.csv', header=None, index=None, sep='\t')
-    pd.DataFrame(ASTARS_f_sto[:,1:np.shape(ASTARS_f_sto)[1]]).to_csv(user_file_path + 'ASTARS_f_sto_' + f.nickname + '.csv', header=None, index=None, sep='\t')
-    pd.DataFrame(ASTARS_x_sto[1:np.shape(ASTARS_x_sto)[0],:]).to_csv(user_file_path + 'ASTARS_x_sto_'  + f.nickname + '.csv', header=None, index=None, sep='\t')
-    pd.DataFrame(FAASTARS_f_sto[:,1:np.shape(FAASTARS_f_sto)[1]]).to_csv(user_file_path + 'FAASTARS_f_sto_'  + f.nickname + '.csv', header=None, index=None, sep='\t')
-    pd.DataFrame(FAASTARS_x_sto[1:np.shape(FAASTARS_x_sto)[0],:]).to_csv(user_file_path + 'FAASTARS_x_sto_'  + f.nickname + '.csv', header=None, index=None, sep='\t')
-    if maxit > test.tr_stop:
-        pd.DataFrame(FAASTARS_adim_sto[:,1:np.shape(FAASTARS_adim_sto)[1]]).to_csv(user_file_path + 'FAASTARS_adim_sto_'  + f.nickname + '.csv', header=None, index=None, sep='\t')  
-        pd.DataFrame(FAASTARS_sub_dist_sto[:,1:np.shape(FAASTARS_sub_dist_sto)[1]]).to_csv(user_file_path + 'FAASTARS_sub_dist_sto_'  + f.nickname + '.csv', header=None, index=None, sep='\t')      
+  
 
         
     # Stop the clock!
